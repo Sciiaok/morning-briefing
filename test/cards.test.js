@@ -38,3 +38,14 @@ test("buildFeishuCardPayloads creates interactive webhook payloads", () => {
   assert.equal(payloads[0].msg_type, "interactive");
   assert.equal(payloads[0].card.header.title.content.includes("晨间简报"), true);
 });
+
+test("buildBriefingCards turns URLs into clickable card buttons", () => {
+  const cards = buildBriefingCards(briefing);
+  const readsCard = cards[1];
+  const actionElement = readsCard.elements.find((element) => element.tag === "action");
+
+  assert.equal(Boolean(actionElement), true);
+  assert.equal(actionElement.actions[0].tag, "button");
+  assert.equal(actionElement.actions[0].url, "https://www.qbitai.com/example");
+  assert.equal(actionElement.actions[0].text.content.includes("量子位文章"), true);
+});
