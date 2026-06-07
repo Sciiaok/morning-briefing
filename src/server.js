@@ -1,5 +1,6 @@
 import express from "express";
 import cron from "node-cron";
+import { formatForFeishuText } from "./format.js";
 
 const DEFAULT_WEBHOOKS = [
   "https://open.feishu.cn/open-apis/bot/v2/hook/965a26e1-f3e9-4702-a979-c64b03b6480a",
@@ -141,7 +142,7 @@ async function generateBriefing() {
   }
 
   const data = await response.json();
-  const text = extractOutputText(data);
+  const text = formatForFeishuText(extractOutputText(data));
   return text.includes("晨间简报") ? text : `晨间简报\n\n${text}`;
 }
 
@@ -318,7 +319,10 @@ ${researchContext}
 
 格式和风格：
 - 总字数控制在 900-1300 字。
-- 使用清晰小标题，适合飞书阅读。
+- 使用清晰小标题，适合飞书 text 消息阅读。
+- 不要使用 Markdown 语法。不要使用 #、##、**加粗**、表格、代码块、项目符号短横线、Markdown 链接格式。
+- 链接请单独成行展示，格式为：标题换行，URL 换行，简短点评。
+- 小标题建议直接写成：“1. AI 产品人今日名词”，不要加粗，不要加井号。
 - 标题和正文必须包含“晨间简报”四个字。
 - 语气聪明、具体、轻快，但不要油腻、不要鸡汤。
 - 对最新资讯和餐饮推荐，尽量给出来源链接或可搜索关键词；涉及日期时写具体日期。`;
