@@ -97,7 +97,7 @@ function getWebhooks() {
 }
 
 async function generateBriefing() {
-  const apiKey = getApiKeyInfo().value;
+  const apiKey = getApiKeyValue();
   if (!apiKey) {
     throw new Error("DASHSCOPE_API_KEY or BAILIAN_API_KEY is required.");
   }
@@ -152,20 +152,14 @@ function getBaseUrl() {
 }
 
 function getApiKeyInfo() {
-  const candidates = [
-    ["DASHSCOPE_API_KEY", process.env.DASHSCOPE_API_KEY],
-    ["BAILIAN_API_KEY", process.env.BAILIAN_API_KEY],
-    ["OPENAI_API_KEY", process.env.OPENAI_API_KEY]
-  ];
-  const found = candidates.find(([, value]) => value);
+  const found = getApiKeyCandidate();
   if (!found) {
     return {
       source: null,
       present: false,
       length: 0,
       masked: null,
-      hasLeadingOrTrailingWhitespace: false,
-      value: ""
+      hasLeadingOrTrailingWhitespace: false
     };
   }
 
@@ -176,9 +170,21 @@ function getApiKeyInfo() {
     present: true,
     length: value.length,
     masked: maskSecret(value),
-    hasLeadingOrTrailingWhitespace: rawValue !== value,
-    value
+    hasLeadingOrTrailingWhitespace: rawValue !== value
   };
+}
+
+function getApiKeyValue() {
+  return getApiKeyCandidate()?.[1]?.trim() || "";
+}
+
+function getApiKeyCandidate() {
+  const candidates = [
+    ["DASHSCOPE_API_KEY", process.env.DASHSCOPE_API_KEY],
+    ["BAILIAN_API_KEY", process.env.BAILIAN_API_KEY],
+    ["OPENAI_API_KEY", process.env.OPENAI_API_KEY]
+  ];
+  return candidates.find(([, value]) => value);
 }
 
 function maskSecret(value) {
