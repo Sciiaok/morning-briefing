@@ -1,5 +1,6 @@
 import express from "express";
 import cron from "node-cron";
+import { buildFeishuCardPayloads } from "./cards.js";
 import { formatForFeishuText } from "./format.js";
 
 const DEFAULT_WEBHOOKS = [
@@ -70,18 +71,22 @@ app.listen(port, () => {
 
 async function runBriefing(trigger) {
   const briefing = await generateBriefing();
+  const payloads = buildFeishuCardPayloads(briefing);
   const webhooks = getWebhooks();
-  const results = await Promise.all(
-    webhooks.map(async (webhook, index) => {
-      const response = await sendFeishuText(webhook, briefing);
-      return {
-        index: index + 1,
+  const results = [];
+
+  for (let webhookIndex = 0; webhookIndex < webhooks.length; webhookIndex += 1) {
+    for (let cardIndex = 0; cardIndex < payloads.length; cardIndex += 1) {
+      const response = await sendFeishuPayload(webhooks[webhookIndex], payloads[cardIndex]);
+      results.push({
+        webhookIndex: webhookIndex + 1,
+        cardIndex: cardIndex + 1,
         ok: response.ok,
         status: response.status,
         body: await response.text()
-      };
-    })
-  );
+      });
+    }
+  }
 
   return {
     ok: results.every((result) => result.ok),
@@ -328,13 +333,10 @@ ${researchContext}
 - 对最新资讯和餐饮推荐，尽量给出来源链接或可搜索关键词；涉及日期时写具体日期。`;
 }
 
-async function sendFeishuText(webhook, text) {
+async function sendFeishuPayload(webhook, payload) {
   return fetch(webhook, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      msg_type: "text",
-      content: { text }
-    })
+    body: JSON.stringify(payload)
   });
 }
