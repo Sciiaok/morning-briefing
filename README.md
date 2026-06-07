@@ -27,7 +27,7 @@ MODEL=glm-5
 可选：
 
 ```text
-BAILIAN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+BAILIAN_BASE_URL=https://coding.dashscope.aliyuncs.com/v1
 SEARCH_STRATEGY=agent_max
 ```
 

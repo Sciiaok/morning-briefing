@@ -148,7 +148,7 @@ async function generateBriefing() {
 }
 
 function getBaseUrl() {
-  return process.env.BAILIAN_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  return process.env.BAILIAN_BASE_URL || "https://coding.dashscope.aliyuncs.com/v1";
 }
 
 function getApiKeyInfo() {
