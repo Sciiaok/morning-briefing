@@ -19,6 +19,24 @@ app.get("/", (_req, res) => {
   });
 });
 
+app.get("/debug/config", (req, res) => {
+  if (process.env.RUN_SECRET) {
+    const token = req.get("x-run-secret") || req.query.secret;
+    if (token !== process.env.RUN_SECRET) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+  }
+
+  const apiKeyInfo = getApiKeyInfo();
+  res.json({
+    ok: true,
+    model: process.env.MODEL || "glm-5",
+    baseUrl: getBaseUrl(),
+    searchStrategy: process.env.SEARCH_STRATEGY || "agent_max",
+    apiKey: apiKeyInfo
+  });
+});
+
 app.post("/run", async (req, res) => {
   if (process.env.RUN_SECRET) {
     const token = req.get("x-run-secret") || req.query.secret;
@@ -79,7 +97,7 @@ function getWebhooks() {
 }
 
 async function generateBriefing() {
-  const apiKey = process.env.DASHSCOPE_API_KEY || process.env.BAILIAN_API_KEY || process.env.OPENAI_API_KEY;
+  const apiKey = getApiKeyInfo().value;
   if (!apiKey) {
     throw new Error("DASHSCOPE_API_KEY or BAILIAN_API_KEY is required.");
   }
@@ -92,7 +110,7 @@ async function generateBriefing() {
     weekday: "short"
   });
 
-  const baseUrl = process.env.BAILIAN_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  const baseUrl = getBaseUrl();
   const endpoint = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
 
   const response = await fetch(endpoint, {
@@ -127,6 +145,45 @@ async function generateBriefing() {
   const data = await response.json();
   const text = extractOutputText(data);
   return text.includes("晨间简报") ? text : `晨间简报\n\n${text}`;
+}
+
+function getBaseUrl() {
+  return process.env.BAILIAN_BASE_URL || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+}
+
+function getApiKeyInfo() {
+  const candidates = [
+    ["DASHSCOPE_API_KEY", process.env.DASHSCOPE_API_KEY],
+    ["BAILIAN_API_KEY", process.env.BAILIAN_API_KEY],
+    ["OPENAI_API_KEY", process.env.OPENAI_API_KEY]
+  ];
+  const found = candidates.find(([, value]) => value);
+  if (!found) {
+    return {
+      source: null,
+      present: false,
+      length: 0,
+      masked: null,
+      hasLeadingOrTrailingWhitespace: false,
+      value: ""
+    };
+  }
+
+  const [source, rawValue] = found;
+  const value = rawValue.trim();
+  return {
+    source,
+    present: true,
+    length: value.length,
+    masked: maskSecret(value),
+    hasLeadingOrTrailingWhitespace: rawValue !== value,
+    value
+  };
+}
+
+function maskSecret(value) {
+  if (value.length <= 8) return "*".repeat(value.length);
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
 }
 
 function extractOutputText(data) {
