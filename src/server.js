@@ -110,6 +110,7 @@ async function generateBriefing() {
     weekday: "short"
   });
 
+  const researchContext = await collectResearchContext(today);
   const baseUrl = getBaseUrl();
   const endpoint = `${baseUrl.replace(/\/$/, "")}/chat/completions`;
 
@@ -128,13 +129,10 @@ async function generateBriefing() {
         },
         {
           role: "user",
-          content: buildPrompt(today)
+          content: buildPrompt(today, researchContext)
         }
       ],
-      enable_search: true,
-      search_options: {
-        search_strategy: process.env.SEARCH_STRATEGY || "agent_max"
-      }
+      temperature: 0.7
     })
   });
 
@@ -200,8 +198,109 @@ function extractOutputText(data) {
   return String(content || "").trim();
 }
 
-function buildPrompt(today) {
+async function collectResearchContext(today) {
+  const queries = [
+    `site:qbitai.com AI Agent 产品 大模型 2026 6月`,
+    `site:jiqizhixin.com AI Agent 产品 大模型 2026 6月`,
+    `site:datawhale.club 大模型 Agent RAG 2026`,
+    `AI agents product founder discussion 2026 Hacker News Reddit`,
+    `杭州 西湖区 滨江区 健康 小众 餐厅 外卖 推荐`
+  ];
+
+  const results = [];
+  for (const query of queries) {
+    const items = await searchDuckDuckGo(query).catch((error) => [
+      { title: "搜索失败", url: "", snippet: `${query}: ${error.message}` }
+    ]);
+    results.push({ query, items: items.slice(0, 4) });
+  }
+
+  const hn = await fetchHackerNews("AI agents product founder").catch(() => []);
+  if (hn.length) {
+    results.push({
+      query: "Hacker News: AI agents product founder",
+      items: hn.slice(0, 4)
+    });
+  }
+
+  return [
+    `检索日期：${today}`,
+    ...results.map((group) => {
+      const lines = group.items.map((item, index) => (
+        `${index + 1}. ${item.title}\n链接：${item.url || "无"}\n摘要：${item.snippet || "无摘要"}`
+      ));
+      return `【搜索：${group.query}】\n${lines.join("\n")}`;
+    })
+  ].join("\n\n");
+}
+
+async function searchDuckDuckGo(query) {
+  const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 MorningBriefingBot/1.0"
+    }
+  });
+  if (!response.ok) {
+    throw new Error(`DuckDuckGo search failed: ${response.status}`);
+  }
+
+  const html = await response.text();
+  const matches = [...html.matchAll(/<a rel="nofollow" class="result__a" href="([^"]+)">([\s\S]*?)<\/a>[\s\S]*?<a class="result__snippet"[\s\S]*?>([\s\S]*?)<\/a>/g)];
+  return matches.map((match) => ({
+    url: decodeDuckDuckGoUrl(stripHtml(match[1])),
+    title: normalizeText(stripHtml(match[2])),
+    snippet: normalizeText(stripHtml(match[3]))
+  })).filter((item) => item.title && item.url);
+}
+
+async function fetchHackerNews(query) {
+  const url = `https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(query)}&tags=story`;
+  const response = await fetch(url);
+  if (!response.ok) return [];
+  const data = await response.json();
+  return (data.hits || []).map((hit) => ({
+    title: hit.title,
+    url: hit.url || `https://news.ycombinator.com/item?id=${hit.objectID}`,
+    snippet: `points: ${hit.points || 0}, comments: ${hit.num_comments || 0}, created_at: ${hit.created_at || ""}`
+  }));
+}
+
+function decodeDuckDuckGoUrl(value) {
+  const decoded = decodeHtml(value);
+  try {
+    const url = new URL(decoded, "https://duckduckgo.com");
+    const uddg = url.searchParams.get("uddg");
+    return uddg ? decodeURIComponent(uddg) : decoded;
+  } catch {
+    return decoded;
+  }
+}
+
+function stripHtml(value) {
+  return decodeHtml(String(value).replace(/<[^>]+>/g, " "));
+}
+
+function decodeHtml(value) {
+  return String(value)
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'");
+}
+
+function normalizeText(value) {
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
+function buildPrompt(today, researchContext) {
   return `今天是 ${today}。请生成一份中文「晨间简报」，目标受众是 AI 产品经理、AI 产品创始人、正在做 AI 产品商业化的人。内容要具体、细、可读、有启发，避免泛泛而谈、空话、新闻通稿腔。整体像一份小型 AI 产品人内参。
+
+以下是真实联网检索到的候选链接和摘要。你必须优先基于这些材料写“今日值得看的 AI 文章/讨论”和“今日杭州吃饭/外卖打卡”。不要编造不存在的链接；如果材料不足，要明确说明“可验证材料有限”，并给出可搜索关键词。
+
+${researchContext}
 
 必须输出 4 个板块：
 
