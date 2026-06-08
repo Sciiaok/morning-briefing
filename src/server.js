@@ -1,7 +1,8 @@
 import express from "express";
 import cron from "node-cron";
-import { buildFeishuCardPayloads } from "./cards.js";
+import { buildFeishuCardPayloads, buildSingleFeishuCardPayload } from "./cards.js";
 import { formatForFeishuText } from "./format.js";
+import { getCardIndexForCron, SCHEDULES } from "./schedule.js";
 
 const DEFAULT_WEBHOOKS = [
   "https://open.feishu.cn/open-apis/bot/v2/hook/965a26e1-f3e9-4702-a979-c64b03b6480a",
@@ -15,7 +16,7 @@ app.get("/", (_req, res) => {
   res.json({
     ok: true,
     service: "AI 晨间简报",
-    schedule: "Asia/Shanghai weekdays 10:30",
+    schedule: "Asia/Shanghai weekdays 10:30 card 1, 15:00 card 2, 17:00 card 4, 21:30 card 3",
     model: process.env.MODEL || "glm-5",
     provider: "Alibaba Cloud Model Studio / Bailian"
   });
@@ -48,7 +49,8 @@ app.post("/run", async (req, res) => {
   }
 
   try {
-    const result = await runBriefing("manual");
+    const cardIndex = req.query.card ? Number(req.query.card) : null;
+    const result = await runBriefing("manual", cardIndex);
     res.json(result);
   } catch (error) {
     console.error(error);
@@ -56,22 +58,27 @@ app.post("/run", async (req, res) => {
   }
 });
 
-cron.schedule(
-  "30 10 * * 1-5",
-  () => {
-    runBriefing("cron").catch((error) => console.error("Briefing failed:", error));
-  },
-  { timezone: "Asia/Shanghai" }
-);
+for (const schedule of SCHEDULES) {
+  cron.schedule(
+    schedule.cron,
+    () => {
+      runBriefing(`cron:${schedule.cron}`, schedule.cardIndex).catch((error) => console.error("Briefing failed:", error));
+    },
+    { timezone: "Asia/Shanghai" }
+  );
+}
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`AI morning briefing service listening on ${port}`);
 });
 
-async function runBriefing(trigger) {
+async function runBriefing(trigger, requestedCardIndex = null) {
+  const cardIndex = requestedCardIndex || getCardIndexForCron(String(trigger).replace(/^cron:/, ""));
   const briefing = await generateBriefing();
-  const payloads = buildFeishuCardPayloads(briefing);
+  const payloads = cardIndex
+    ? [buildSingleFeishuCardPayload(briefing, cardIndex)]
+    : buildFeishuCardPayloads(briefing);
   const webhooks = getWebhooks();
   const results = [];
 
@@ -91,6 +98,7 @@ async function runBriefing(trigger) {
   return {
     ok: results.every((result) => result.ok),
     trigger,
+    cardIndex: cardIndex || "all",
     sentAt: new Date().toISOString(),
     results
   };

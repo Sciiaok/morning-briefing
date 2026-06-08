@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBriefingCards, buildFeishuCardPayloads } from "../src/cards.js";
+import { buildBriefingCards, buildFeishuCardPayloads, buildSingleFeishuCardPayload } from "../src/cards.js";
 
 const briefing = [
   "晨间简报｜2026-06-07",
@@ -48,4 +48,12 @@ test("buildBriefingCards turns URLs into clickable card buttons", () => {
   assert.equal(actionElement.actions[0].tag, "button");
   assert.equal(actionElement.actions[0].url, "https://www.qbitai.com/example");
   assert.equal(actionElement.actions[0].text.content.includes("量子位文章"), true);
+});
+
+test("buildSingleFeishuCardPayload creates only the requested card", () => {
+  const payload = buildSingleFeishuCardPayload(briefing, 4);
+
+  assert.equal(payload.msg_type, "interactive");
+  assert.equal(payload.card.header.title.content, "晨间简报｜杭州吃饭/外卖打卡");
+  assert.equal(payload.card.elements[0].text.content.includes("西湖区"), true);
 });

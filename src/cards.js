@@ -34,6 +34,18 @@ export function buildFeishuCardPayloads(briefingText) {
   }));
 }
 
+export function buildSingleFeishuCardPayload(briefingText, cardIndex) {
+  const cards = buildBriefingCards(briefingText);
+  const card = cards[cardIndex - 1];
+  if (!card) {
+    throw new Error(`Unknown card index: ${cardIndex}`);
+  }
+  return {
+    msg_type: "interactive",
+    card
+  };
+}
+
 export function buildBriefingCards(briefingText) {
   const sections = splitBriefingSections(briefingText);
   return SECTION_DEFS.map((section) => buildCard(section, sections[section.key]));
