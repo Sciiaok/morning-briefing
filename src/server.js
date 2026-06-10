@@ -3,7 +3,7 @@ import cron from "node-cron";
 import { buildFeishuCardPayloads, buildSingleFeishuCardPayload } from "./cards.js";
 import { formatForFeishuText } from "./format.js";
 import { getCardIndexForCron, SCHEDULES } from "./schedule.js";
-import { getTopicForDate } from "./topics.js";
+import { getDailyPlanForDate } from "./topics.js";
 
 const DEFAULT_WEBHOOKS = [
   "https://open.feishu.cn/open-apis/bot/v2/hook/965a26e1-f3e9-4702-a979-c64b03b6480a",
@@ -125,7 +125,7 @@ async function generateBriefing() {
     weekday: "short"
   });
   const topicDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" });
-  const todayTopic = getTopicForDate(topicDate);
+  const dailyPlan = getDailyPlanForDate(topicDate);
 
   const researchContext = await collectResearchContext(today);
   const baseUrl = getBaseUrl();
@@ -146,7 +146,7 @@ async function generateBriefing() {
         },
         {
           role: "user",
-          content: buildPrompt(today, researchContext, todayTopic)
+          content: buildPrompt(today, researchContext, dailyPlan)
         }
       ],
       temperature: 0.7
@@ -312,12 +312,24 @@ function normalizeText(value) {
   return String(value).replace(/\s+/g, " ").trim();
 }
 
-function buildPrompt(today, researchContext, todayTopic) {
+function buildPrompt(today, researchContext, dailyPlan) {
   return `今天是 ${today}。请生成一份中文「晨间简报」，目标受众是 AI 产品经理、AI 产品创始人、正在做 AI 产品商业化的人。内容要具体、细、可读、有启发，避免泛泛而谈、空话、新闻通稿腔。整体像一份小型 AI 产品人内参。
 
-今天第一张卡片的指定名词是：${todayTopic.term}
-讲述角度：${todayTopic.angle}
+今天第一张卡片的指定名词是：${dailyPlan.aiTopic.term}
+讲述角度：${dailyPlan.aiTopic.angle}
 必须讲这个名词，不要改成其他名词。不要连续多天使用同一个名词。
+
+今天第二张卡片的文章/讨论焦点是：${dailyPlan.articleFocus.name}
+筛选要求：${dailyPlan.articleFocus.instruction}
+必须优先围绕这个焦点选文章，避免连续几天推荐同一来源、同一标题或同一类角度。
+
+今天第三张卡片的非 AI 小知识主题是：${dailyPlan.knowledgeTheme.name}
+讲述要求：${dailyPlan.knowledgeTheme.instruction}
+必须围绕这个主题写，不能写 AI、模型、算法、机器人或科技创业案例。
+
+今天第四张卡片的杭州吃饭/外卖主题是：${dailyPlan.foodTheme.name}
+推荐要求：${dailyPlan.foodTheme.instruction}
+必须优先围绕这个餐饮主题推荐，避免连续几天推荐同一家店或同一种菜系。
 
 以下是真实联网检索到的候选链接和摘要。你必须优先基于这些材料写“今日值得看的 AI 文章/讨论”和“今日杭州吃饭/外卖打卡”。不要编造不存在的链接；如果材料不足，要明确说明“可验证材料有限”，并给出可搜索关键词。
 
@@ -326,16 +338,16 @@ ${researchContext}
 必须输出 4 个板块：
 
 1. AI 产品人今日名词
-介绍指定名词“${todayTopic.term}”。要求：一句话解释它是什么；讲清它为什么对 AI 产品有用；给一个真实产品场景或创业场景例子；给一个今天就能试的小练习或判断清单；不要写成百科词条，要写成产品人能用的认知工具。
+介绍指定名词“${dailyPlan.aiTopic.term}”。要求：一句话解释它是什么；讲清它为什么对 AI 产品有用；给一个真实产品场景或创业场景例子；给一个今天就能试的小练习或判断清单；不要写成百科词条，要写成产品人能用的认知工具。
 
 2. 今日值得看的 AI 文章/讨论
-联网检索并推荐 2-4 条最近热门、值得 AI 产品经理/创始人阅读的 AI 相关文章、公众号文章、社区讨论或长文。优先关注 Datawhale、机器之心、量子位、Founder Park、硅星人、AI 产品榜、晚点、极客公园、海外 AI Builder/产品讨论、Hacker News、Reddit、X/Twitter 上有影响力的 AI 产品/创业讨论等。尽量提供可打开链接；公众号文章无法稳定抓取时，提供公众号名称、标题、发布日期和搜索关键词。每条说明为什么值得看，重点说对产品判断、商业化、用户需求、竞争格局、工作流设计的启发。
+围绕今日焦点“${dailyPlan.articleFocus.name}”推荐 2-4 条最近热门、值得 AI 产品经理/创始人阅读的 AI 相关文章、公众号文章、社区讨论或长文。优先关注 Datawhale、机器之心、量子位、Founder Park、硅星人、AI 产品榜、晚点、极客公园、海外 AI Builder/产品讨论、Hacker News、Reddit、X/Twitter 上有影响力的 AI 产品/创业讨论等。尽量提供可打开链接；公众号文章无法稳定抓取时，提供公众号名称、标题、发布日期和搜索关键词。每条说明为什么值得看，重点说对产品判断、商业化、用户需求、竞争格局、工作流设计的启发。
 
 3. 一个有趣但有用的小知识
-提供一个与 AI 无关的通识知识点，可来自历史、人文、经济、地理、商业史、城市、饮食、艺术、组织管理、认知科学等。不要写 AI、模型、算法、机器人或科技创业案例。开头要有吸引人的问题或反常识钩子；讲述要具体，有人物、场景、冲突或可视化细节；最后只用一小句落到对产品经理/创始人有启发的观察。
+围绕今日主题“${dailyPlan.knowledgeTheme.name}”提供一个与 AI 无关的通识知识点。不要写 AI、模型、算法、机器人或科技创业案例。开头要有吸引人的问题或反常识钩子；讲述要具体，有人物、场景、冲突或可视化细节；最后只用一小句落到对产品经理/创始人有启发的观察。
 
 4. 今日杭州吃饭/外卖打卡
-推荐 2-3 个适合今天尝试的杭州餐饮选择，范围限定在西湖区和滨江区。目标：好吃、相对健康、有特色，不要只是大众热门口味或网红店堆砌。每个推荐写清：区域、适合场景、推荐理由、建议点什么、健康/口味提醒。如果无法确认当天营业状态，请明确说“营业状态需下单前确认”。
+围绕今日餐饮主题“${dailyPlan.foodTheme.name}”推荐 2-3 个适合今天尝试的杭州餐饮选择，范围限定在西湖区和滨江区。目标：好吃、相对健康、有特色，不要只是大众热门口味或网红店堆砌。每个推荐写清：区域、适合场景、推荐理由、建议点什么、健康/口味提醒。如果无法确认当天营业状态，请明确说“营业状态需下单前确认”。
 
 格式和风格：
 - 总字数控制在 900-1300 字。
